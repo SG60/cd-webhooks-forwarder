@@ -1,0 +1,15 @@
+resources:
+  - app.yaml
+
+commonLabels:
+  app.kubernetes.io/name: cd-webhooks-forwarder
+  app.kubernetes.io/instance: argocd-webhooks-forwarding
+
+labels:
+  - pairs:
+      app.kubernetes.io/version: sha-CURRENT-VERSION
+
+images:
+  - name: lhr.ocir.io/lrdyqp2xtoja/cd-webhooks-forwarder
+    newTag: sha-CURRENT-VERSION
+    digest: CURRENT-DIGEST

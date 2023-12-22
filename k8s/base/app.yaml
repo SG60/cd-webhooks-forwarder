@@ -1,0 +1,31 @@
+# https://kubernetes.io/docs/concepts/services-networking/service/
+apiVersion: v1
+kind: Service
+metadata:
+  name: cd-webhooks-forwarder
+  namespace: cd-webhooks-forwarder
+spec:
+  type: ClusterIP
+  ports:
+    - name: cd-webhooks-forwarder
+      port: 80
+---
+# https://kubernetes.io/docs/concepts/workloads/controllers/deployment/
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cd-webhooks-forwarder
+spec:
+  template:
+    spec:
+      containers:
+        - name: cd-webhooks-forwarder
+          image: lhr.ocir.io/lrdyqp2xtoja/cd-webhooks-forwarder
+          resources:
+            requests:
+              cpu: 10m
+              memory: 1Mi
+            limits:
+              cpu: 100m
+              memory: 100Mi
+---
