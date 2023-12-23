@@ -84,6 +84,14 @@ jobs:
 
       - run: docker push --all-tags $DOCKER_CONTAINER_IMAGE_BASE
 
+      - name: get image digest
+        id: docker-image-digest
+        run: |
+          # get digest of pushed image, and get rid of everything up to the actual digest (i.e. remove the repo and name)
+          DOCKER_IMAGE_DIGEST=$(docker inspect --format='{{index .RepoDigests 0}}' lhr.ocir.io/lrdyqp2xtoja/cd-webhooks-forwarder:sha-${COMMIT_SHA} | sed 's/.*@//')
+          echo docker_image_digest=$DOCKER_IMAGE_DIGEST >> $GITHUB_OUTPUT
+          echo "image digest: \`${DOCKER_IMAGE_DIGEST}\`" >> $GITHUB_STEP_SUMMARY
+
       - name: Run Trivy vulnerability scanner
         uses: aquasecurity/trivy-action@master
         with:
@@ -94,7 +102,7 @@ jobs:
           severity: "CRITICAL"
 
     outputs:
-      pushed-image-digest: ${{ steps.build-and-push-action-1.outputs.digest }}
+      pushed-image-digest: ${{ steps.docker-image-digest.outputs.docker_image_digest }}
 
   deploy:
     if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
