@@ -1,3 +1,12 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+labels:
+  - pairs:
+      app.kubernetes.io/version: "example-version"
+commonLabels:
+  app.kubernetes.io/name: cd-webhooks-forwarder
+  app.kubernetes.io/instance: argocd-webhooks
+
 resources:
   - ../../base
 

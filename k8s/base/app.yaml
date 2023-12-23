@@ -23,7 +23,7 @@ spec:
           image: lhr.ocir.io/lrdyqp2xtoja/cd-webhooks-forwarder
           resources:
             requests:
-              cpu: 10m
+              cpu: 5m
               memory: 1Mi
             limits:
               cpu: 100m

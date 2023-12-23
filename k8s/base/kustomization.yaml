@@ -3,7 +3,6 @@ resources:
 
 commonLabels:
   app.kubernetes.io/name: cd-webhooks-forwarder
-  app.kubernetes.io/instance: argocd-webhooks-forwarding
 
 labels:
   - pairs:
