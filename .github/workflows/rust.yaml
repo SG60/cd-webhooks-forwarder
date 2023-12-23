@@ -120,7 +120,7 @@ jobs:
           cd k8s/overlays/prod
           # update image digest
           $KUSTOMIZE_COMMAND edit set image \
-            ${DOCKER_CONTAINER_IMAGE_BASE}:sha-${COMMIT_SHA}@${{ needs.build.outputs.pushed-image-digest }}
+            ${DOCKER_CONTAINER_IMAGE_BASE}=${DOCKER_CONTAINER_IMAGE_BASE}:sha-${COMMIT_SHA}@${{ needs.build.outputs.pushed-image-digest }}
       - name: Update version label
         uses: mikefarah/yq@v4.40.5
         with:

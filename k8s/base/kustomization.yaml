@@ -7,8 +7,3 @@ commonLabels:
 labels:
   - pairs:
       app.kubernetes.io/version: sha-CURRENT-VERSION
-
-images:
-  - name: lhr.ocir.io/lrdyqp2xtoja/cd-webhooks-forwarder
-    newTag: sha-CURRENT-VERSION
-    digest: CURRENT-DIGEST
