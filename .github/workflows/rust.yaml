@@ -114,24 +114,21 @@ jobs:
         env:
           KUSTOMIZE_COMMAND: ${{ steps.kustomize-installation.outputs.KUSTOMIZE_COMMAND }}
         run: |
-          cd k8s/prod
+          cd k8s/overlays/prod
           # update image digest
           $KUSTOMIZE_COMMAND edit set image \
             ${DOCKER_CONTAINER_IMAGE_BASE}:sha-${COMMIT_SHA}@${{ needs.build.outputs.pushed-image-digest }}
-          # update version label
-          echo "apiVersion: apps/v1
-          kind: Deployment
-          metadata:
-            name: hello-rust-backend
-            labels:
-              app.kubernetes.io/version: ${{ needs.build.outputs.app-version }}
-          " > ./generated/labels.patch.yaml
+      - name: Update version label
+        uses: mikefarah/yq@v4.40.5
+        with:
+          cmd: yq -i '.labels[].pairs."app.kubernetes.io/version" = strenv(COMMIT_SHA)' k8s/overlays/prod/kustomization.yaml
 
       - name: Commit to git
         run: |
-          # git config user.name github-actions
-          # git config user.email github-actions@github.com
-          git add k8s/base/kustomization.yaml
+          git config user.name github-actions
+          git config user.email github-actions@github.com
+          git add k8s/overlays/prod
           git commit -m "update: image to version $COMMIT_SHA"
+          git pull --rebase
           git push
           echo "Committed to infra" >> $GITHUB_STEP_SUMMARY
