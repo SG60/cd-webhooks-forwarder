@@ -37,6 +37,8 @@ jobs:
       - run: cargo install cross
 
       - uses: docker/setup-buildx-action@v3
+        with:
+          install: true
 
       - name: build
         run: cross build --target ${{ matrix.target.rust }} --release
@@ -71,7 +73,6 @@ jobs:
         with:
           context: .
           file: Dockerfile
-          push: true
           load: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
@@ -80,6 +81,8 @@ jobs:
           platforms: ${{ matrix.target.docker }}
           build-args: |
             RUST_TARGET_DIR=target/${{ matrix.target.rust }}/release
+
+      - run: docker push --all-tags $DOCKER_CONTAINER_IMAGE_BASE
 
       - name: Run Trivy vulnerability scanner
         uses: aquasecurity/trivy-action@master
