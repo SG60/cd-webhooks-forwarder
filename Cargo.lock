@@ -227,10 +227,12 @@ dependencies = [
 name = "cd-webhooks-forwarder"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "axum 0.7.2",
  "opentelemetry-tracing-utils",
  "tokio",
  "tower",
+ "tracing",
 ]
 
 [[package]]

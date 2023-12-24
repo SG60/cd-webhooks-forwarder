@@ -46,6 +46,8 @@ jobs:
         with: {name: "nix-community"}
       - uses: DeterminateSystems/magic-nix-cache-action@main
 
+      - name: test
+        run: nix develop -c cargo test
       - name: build
         run: nix develop -c cross build --target ${{ matrix.target.rust }} --release
 
