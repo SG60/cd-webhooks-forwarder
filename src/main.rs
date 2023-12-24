@@ -47,7 +47,7 @@ async fn post_webhook_handler(
         .to_str()
         .map_err(|_| StatusCode::BAD_REQUEST)?
     {
-        "pull_request" | "push" => Ok("asdf"), // false => Err(StatusCode::BAD_REQUEST),
+        "pull_request" | "push" => Ok("forwarded"), // false => Err(StatusCode::BAD_REQUEST),
         _ => Err(StatusCode::BAD_REQUEST),
     }
 }
