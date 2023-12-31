@@ -14,9 +14,11 @@ use tower::ServiceBuilder;
 use tower_http::trace::TraceLayer;
 use tracing::{debug, info, trace};
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 struct AppState {
     hmac_verification_key: Option<hmac::Key>,
+    proxy_destinations: Vec<String>,
+    client: reqwest::Client,
 }
 
 #[tokio::main]
@@ -36,6 +38,8 @@ async fn main() -> Result<()> {
 
     let app_state = AppState {
         hmac_verification_key,
+        proxy_destinations: vec!["https://httpbin.org/anything/put_anything".to_owned()],
+        ..Default::default()
     };
 
     // build our application with a single route
@@ -65,7 +69,9 @@ fn app(state: AppState) -> Router {
 async fn post_webhook_handler(
     State(state): State<AppState>,
     headers: HeaderMap,
-    body: String,
+    parts: axum::http::request::Parts,
+    body: Body,
+    // body: String,
 ) -> Result<&'static str, StatusCode> {
     dbg!(&headers);
 
@@ -77,7 +83,15 @@ async fn post_webhook_handler(
         .and_then(|x| x.to_str().ok())
         .ok_or(StatusCode::BAD_REQUEST)?
     {
-        "pull_request" | "push" => Ok("forwarded"), // false => Err(StatusCode::BAD_REQUEST),
+        "pull_request" | "push" => {
+            info!("forwarding");
+
+            // TODO - use shared client
+            todo!();
+
+            Ok("forwarded") // false => Err(StatusCode::BAD_REQUEST),
+        }
+
         _ => Err(StatusCode::BAD_REQUEST),
     }
 }
@@ -133,6 +147,10 @@ async fn webhook_secret_verification_middleware(
 mod tests {
     use axum::{body::Body, http::Request};
     use tower::ServiceExt;
+    use wiremock::{
+        matchers::{method, path},
+        Mock, MockServer, ResponseTemplate,
+    };
 
     use super::*;
 
@@ -142,36 +160,35 @@ mod tests {
     #[test(tokio::test)]
     async fn pull_request_synchronised() {
         // https://docs.github.com/en/webhooks/using-webhooks/validating-webhook-deliveries#testing-the-webhook-payload-validation
+        // Payloads, secret and signatures from GitHub page on validation
         let github_webhook_secret = "It's a Secret to Everybody";
+        let body_content = "Hello, World!";
+        let request_body = Body::from(body_content);
+
+        // Start a background mock HTTP server on a random local port
+        let mock_server = MockServer::start().await;
+
+        // Arrange the behaviour of the MockServer adding a Mock:
+        // when it receives a GET request on '/hello' it will respond with a 200.
+        Mock::given(method("POST"))
+            .and(path("/webhook"))
+            .respond_with(ResponseTemplate::new(200))
+            .expect(1)
+            // We assign a name to the mock - it will be shown in error messages
+            // if our expectation is not verified!
+            .named("webhook 1")
+            // Mounting the mock on the mock server - it's now effective!
+            .mount(&mock_server)
+            .await;
+
         let app_state = AppState {
             hmac_verification_key: Some(hmac::Key::new(
                 hmac::HMAC_SHA256,
                 github_webhook_secret.as_bytes(),
             )),
+            proxy_destinations: vec![format!("{}/webhook", mock_server.uri())],
+            ..Default::default()
         };
-
-        let body_content = "Hello, World!";
-        dbg!(body_content.as_bytes());
-        let request_body = Body::from(body_content);
-        let signature_tag = hmac::sign(
-            &app_state.hmac_verification_key.clone().unwrap(),
-            body_content.as_bytes(),
-        );
-
-        println!("{signature_tag:?}");
-
-        let signature_tag = signature_tag.as_ref();
-
-        use std::fmt::Write;
-        let mut signature_string = "sha256=".to_owned();
-        for i in signature_tag {
-            write!(signature_string, "{:02x}", i).unwrap();
-        }
-
-        dbg!(&signature_string);
-
-        let z = app_state.hmac_verification_key.clone().unwrap();
-        dbg!(z);
 
         let app = app(app_state);
         // `Router` implements `tower::Service<Request<Body>>` so we can
@@ -182,16 +199,17 @@ mod tests {
                     .uri("/webhook")
                     .method("POST")
                     .header("X-GitHub-Event", "pull_request")
-                    .header("X-Hub-Signature-256", signature_string)
+                    .header(
+                        "X-Hub-Signature-256",
+                        "sha256=757107ea0eb2509fc211221cce984b8a37570b6d7586c22c46f4379c8b043e17",
+                    )
                     .body(request_body)
                     .unwrap(),
             )
             .await
             .unwrap();
 
-        assert_eq!(response.status(), StatusCode::OK);
         let (parts, body) = response.into_parts();
-
         let body_string: String = String::from_utf8(
             axum::body::to_bytes(body, usize::MAX)
                 .await
@@ -200,9 +218,10 @@ mod tests {
         )
         .unwrap();
 
-        dbg!(parts);
+        dbg!(&parts);
         dbg!(&body_string);
 
+        assert_eq!(parts.status, StatusCode::OK);
         assert!(body_string.contains("forwarded"));
     }
 }
