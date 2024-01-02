@@ -67,6 +67,17 @@ fn app(state: AppState) -> Router {
         .with_state(state)
 }
 
+#[derive(Debug, serde::Serialize, serde::Deserialize)]
+struct ResponseJsonPayload {
+    message: String,
+    responses: Vec<IndividualWebhookResponse>,
+}
+#[derive(Debug, serde::Serialize, serde::Deserialize)]
+struct IndividualWebhookResponse {
+    source: String,
+    body: serde_json::Value,
+}
+
 #[tracing::instrument(ret, err)]
 async fn post_webhook_handler(
     State(state): State<AppState>,
@@ -74,10 +85,8 @@ async fn post_webhook_handler(
     parts: axum::http::request::Parts,
     body: Body,
     // body: String,
-) -> Result<&'static str, StatusCode> {
+) -> Result<axum::Json<ResponseJsonPayload>, StatusCode> {
     dbg!(&headers);
-
-    dbg!(body);
 
     match headers
         .get("X-GitHub-Event")
@@ -88,10 +97,26 @@ async fn post_webhook_handler(
         "pull_request" | "push" => {
             info!("forwarding");
 
+            let body_bytes = body.collect().await.unwrap().to_bytes();
+
+            for i in state.proxy_destinations {
+                dbg!(i);
+            }
+
+            let responseJson = axum::Json(ResponseJsonPayload {
+                message: "test message".to_owned(),
+                responses: vec![IndividualWebhookResponse {
+                    source: "source 1".to_owned(),
+                    body: "asdf".into(),
+                }],
+            });
+
+            dbg!(&responseJson);
+
             // TODO - use shared client
             todo!();
 
-            Ok("forwarded") // false => Err(StatusCode::BAD_REQUEST),
+            Ok(responseJson)
         }
 
         _ => Err(StatusCode::BAD_REQUEST),
@@ -147,6 +172,8 @@ async fn webhook_secret_verification_middleware(
 
 #[cfg(test)]
 mod tests {
+    use std::str::FromStr;
+
     use axum::{body::Body, http::Request};
     use tower::ServiceExt;
     use wiremock::{
@@ -202,6 +229,10 @@ mod tests {
                     .method("POST")
                     .header("X-GitHub-Event", "pull_request")
                     .header(
+                        "traceparent",
+                        "00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01",
+                    )
+                    .header(
                         "X-Hub-Signature-256",
                         "sha256=757107ea0eb2509fc211221cce984b8a37570b6d7586c22c46f4379c8b043e17",
                     )
@@ -221,7 +252,9 @@ mod tests {
         .unwrap();
 
         dbg!(&parts);
+        let body_json = serde_json::Value::from_str(&body_string);
         dbg!(&body_string);
+        dbg!(&body_json);
 
         assert_eq!(parts.status, StatusCode::OK);
         assert!(body_string.contains("forwarded"));
