@@ -11,7 +11,8 @@ axum = "0.7.2"
 base64 = "0.21.5"
 hex = "0.4.3"
 http-body-util = "0.1.0"
-opentelemetry-tracing-utils = "0.1.0"
+# use local copy
+opentelemetry-tracing-utils = { version = "0.1.0", path = "../eventspider/eventspider-backend/packages/opentelemetry-tracing-utils" }
 reqwest = { version = "0.11.23", default-features = false, features = [
 	"rustls-tls",
 	"json",
