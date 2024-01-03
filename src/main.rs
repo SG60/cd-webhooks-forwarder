@@ -71,9 +71,12 @@ async fn main() -> Result<()> {
 
     let app_state = AppState {
         hmac_verification_key,
+        // TODO: make this configurable through an env var or command line
         proxy_destinations: vec![
-            "http://httpbin.org/anything/put_anything".to_owned(),
-            "http://httpbin.org/any".to_owned(),
+            // "http://httpbin.org/anything/put_anything".to_owned(),
+            "http://argocd-server:80/api/webhook".to_owned(),
+            "http://argocd-applicationset-controller:7000/api/webhook".to_owned(),
+            "http://kubechecks.kubechecks:8080/api/webhook/hooks".to_owned(),
         ],
         ..Default::default()
     };
