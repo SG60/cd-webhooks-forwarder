@@ -9,14 +9,15 @@ edition = "2021"
 anyhow = "1.0.76"
 axum = "0.7.2"
 base64 = "0.21.5"
+futures = "0.3.30"
 hex = "0.4.3"
+http = "1.0.0"
 http-body-util = "0.1.0"
+hyper = "1.1.0"
+hyper-util = { version = "0.1.2", features = ["client", "client-legacy"] }
+opentelemetry-stdout = { version = "0.2.0", features = ["trace"] }
 # use local copy
-opentelemetry-tracing-utils = { version = "0.1.0", path = "../eventspider/eventspider-backend/packages/opentelemetry-tracing-utils" }
-reqwest = { version = "0.11.23", default-features = false, features = [
-	"rustls-tls",
-	"json",
-] }
+opentelemetry-tracing-utils = { version = "0.2.0", path = "../eventspider/eventspider-backend/packages/opentelemetry-tracing-utils" }
 ring = "0.17.7"
 serde = "1.0.194"
 serde_json = "1.0.110"

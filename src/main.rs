@@ -1,3 +1,5 @@
+use std::default;
+
 use anyhow::Result;
 use axum::{
     body::Body,
@@ -8,17 +10,46 @@ use axum::{
     routing::post,
     Router,
 };
+use futures::StreamExt;
 use http_body_util::BodyExt;
+use hyper::body::Bytes;
+use hyper_util::{
+    client::legacy::{connect::HttpConnector, Client},
+    rt::TokioExecutor,
+};
+use opentelemetry_tracing_utils::{OpenTelemetrySpanExt, TracingLayer, TracingService};
 use ring::hmac;
-use tower::ServiceBuilder;
+use serde_json::json;
+use tower::{Service, ServiceBuilder, ServiceExt};
 use tower_http::trace::TraceLayer;
-use tracing::{debug, info, trace};
+use tracing::{debug, debug_span, info, trace, Instrument};
 
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug)]
 struct AppState {
     hmac_verification_key: Option<hmac::Key>,
     proxy_destinations: Vec<String>,
-    client: reqwest::Client,
+    client: TracingService<Client<HttpConnector, http_body_util::Full<Bytes>>>,
+}
+
+impl Default for AppState {
+    fn default() -> Self {
+        let hyper_client =
+            Client::builder(TokioExecutor::new()).build_http::<http_body_util::Full<Bytes>>();
+
+        let tower_service_stack = ServiceBuilder::new()
+            .layer(TracingLayer)
+            .service(hyper_client);
+
+        let hyper_wrapped_client = futures::executor::block_on(tower_service_stack.clone().ready())
+            .expect("should be valid")
+            .to_owned();
+
+        Self {
+            hmac_verification_key: default::Default::default(),
+            proxy_destinations: default::Default::default(),
+            client: hyper_wrapped_client,
+        }
+    }
 }
 
 #[tokio::main]
@@ -36,9 +67,14 @@ async fn main() -> Result<()> {
             None
         };
 
+    info!("starting up");
+
     let app_state = AppState {
         hmac_verification_key,
-        proxy_destinations: vec!["https://httpbin.org/anything/put_anything".to_owned()],
+        proxy_destinations: vec![
+            "http://httpbin.org/anything/put_anything".to_owned(),
+            "http://httpbin.org/any".to_owned(),
+        ],
         ..Default::default()
     };
 
@@ -53,7 +89,10 @@ async fn main() -> Result<()> {
 
     Ok(())
 }
+
+#[tracing::instrument(ret)]
 fn app(state: AppState) -> Router {
+    info!("creating router");
     Router::new()
         .route("/webhook", post(post_webhook_handler))
         .layer(
@@ -62,7 +101,9 @@ fn app(state: AppState) -> Router {
                     state.clone(),
                     webhook_secret_verification_middleware,
                 ))
-                .layer(TraceLayer::new_for_http()),
+                // tower_http trace logging
+                .layer(TraceLayer::new_for_http())
+                .map_request(opentelemetry_tracing_utils::extract_trace_context),
         )
         .with_state(state)
 }
@@ -75,10 +116,11 @@ struct ResponseJsonPayload {
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
 struct IndividualWebhookResponse {
     source: String,
+    status: u16,
     body: serde_json::Value,
 }
 
-#[tracing::instrument(ret, err)]
+#[tracing::instrument(ret, err, skip(state, parts, body))]
 async fn post_webhook_handler(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -86,7 +128,12 @@ async fn post_webhook_handler(
     body: Body,
     // body: String,
 ) -> Result<axum::Json<ResponseJsonPayload>, StatusCode> {
-    dbg!(&headers);
+    debug!("{:?}", &headers);
+
+    debug!(
+        "current trace context: {:#?}",
+        tracing::Span::current().context()
+    );
 
     match headers
         .get("X-GitHub-Event")
@@ -99,31 +146,66 @@ async fn post_webhook_handler(
 
             let body_bytes = body.collect().await.unwrap().to_bytes();
 
-            for i in state.proxy_destinations {
-                dbg!(i);
-            }
+            debug!(
+                "current trace context: {:#?}",
+                tracing::Span::current().context()
+            );
 
-            let responseJson = axum::Json(ResponseJsonPayload {
-                message: "test message".to_owned(),
-                responses: vec![IndividualWebhookResponse {
-                    source: "source 1".to_owned(),
-                    body: "asdf".into(),
-                }],
+            let webhook_responses: Vec<_> = state
+                .proxy_destinations
+                .iter()
+                .map(|destination| {
+                    let mut new_parts = parts.clone();
+                    new_parts.uri = http::Uri::try_from(destination).unwrap();
+
+                    let request = hyper::Request::from_parts(new_parts, body_bytes.clone().into());
+
+                    let response_future = state.client.clone().call(request);
+
+                    async {
+                        let response = response_future.await.unwrap();
+
+                        let (parts, incoming_body) = response.into_parts();
+
+                        let status = parts.status;
+
+                        let body = incoming_body.collect().await.unwrap().to_bytes();
+                        let json = serde_json::from_slice::<serde_json::Value>(&body)
+                            .unwrap_or_else(|_| {
+                                let body_processed = String::from_utf8_lossy(&body);
+                                json!(body_processed)
+                            });
+
+                        debug!(?status, "{:?}", &json);
+
+                        IndividualWebhookResponse {
+                            body: json,
+                            source: destination.to_owned(),
+                            status: status.as_u16(),
+                        }
+                    }
+                    .instrument(debug_span!("async block"))
+                })
+                .collect::<futures::stream::FuturesUnordered<_>>()
+                .collect()
+                .instrument(debug_span!("forwarding webhook"))
+                .await;
+
+            let response_json = axum::Json(ResponseJsonPayload {
+                message: "webhook forwarded".to_owned(),
+                responses: webhook_responses,
             });
 
-            dbg!(&responseJson);
+            info!("{:#?}", &response_json);
 
-            // TODO - use shared client
-            todo!();
-
-            Ok(responseJson)
+            Ok(response_json)
         }
 
         _ => Err(StatusCode::BAD_REQUEST),
     }
 }
 
-#[tracing::instrument(err)]
+#[tracing::instrument(err, skip_all)]
 async fn webhook_secret_verification_middleware(
     State(state): State<AppState>,
     parts: axum::http::request::Parts,
@@ -175,19 +257,23 @@ mod tests {
     use std::str::FromStr;
 
     use axum::{body::Body, http::Request};
+    use serde_json::json;
     use tower::ServiceExt;
     use wiremock::{
-        matchers::{method, path},
+        matchers::{self, method},
         Mock, MockServer, ResponseTemplate,
     };
 
     use super::*;
 
     // make test logs show up on the console
-    use test_log::test;
+    // use test_log::test;
 
-    #[test(tokio::test)]
+    // #[test(tokio::test)]
+    #[tokio::test]
     async fn pull_request_synchronised() {
+        opentelemetry_tracing_utils::set_up_logging().unwrap();
+
         // https://docs.github.com/en/webhooks/using-webhooks/validating-webhook-deliveries#testing-the-webhook-payload-validation
         // Payloads, secret and signatures from GitHub page on validation
         let github_webhook_secret = "It's a Secret to Everybody";
@@ -200,8 +286,11 @@ mod tests {
         // Arrange the behaviour of the MockServer adding a Mock:
         // when it receives a GET request on '/hello' it will respond with a 200.
         Mock::given(method("POST"))
-            .and(path("/webhook"))
-            .respond_with(ResponseTemplate::new(200))
+            .and(matchers::path("/webhook"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "message": "stuff stuff stuff",
+                "webhook_data_1": "webhook info info info"
+            })))
             .expect(1)
             // We assign a name to the mock - it will be shown in error messages
             // if our expectation is not verified!
@@ -229,10 +318,6 @@ mod tests {
                     .method("POST")
                     .header("X-GitHub-Event", "pull_request")
                     .header(
-                        "traceparent",
-                        "00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01",
-                    )
-                    .header(
                         "X-Hub-Signature-256",
                         "sha256=757107ea0eb2509fc211221cce984b8a37570b6d7586c22c46f4379c8b043e17",
                     )
@@ -251,12 +336,13 @@ mod tests {
         )
         .unwrap();
 
-        dbg!(&parts);
+        debug!("{:?}", &parts);
         let body_json = serde_json::Value::from_str(&body_string);
-        dbg!(&body_string);
-        dbg!(&body_json);
+        debug!("{:?}", &body_string);
+        debug!("{:?}", &body_json);
 
         assert_eq!(parts.status, StatusCode::OK);
         assert!(body_string.contains("forwarded"));
+        assert!(body_string.contains("webhook info info info"));
     }
 }
