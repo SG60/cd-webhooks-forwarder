@@ -317,7 +317,7 @@ mod tests {
         let response = app
             .oneshot(
                 Request::builder()
-                    .uri("/webhook")
+                    .uri("/api/webhook")
                     .method("POST")
                     .header("X-GitHub-Event", "pull_request")
                     .header(
