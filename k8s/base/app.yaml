@@ -17,6 +17,9 @@ metadata:
   name: cd-webhooks-forwarder
 spec:
   template:
+    metadata:
+      annotations:
+        instrumentation.opentelemetry.io/inject-sdk: "true"
     spec:
       containers:
         - name: cd-webhooks-forwarder
