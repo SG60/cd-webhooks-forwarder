@@ -97,7 +97,7 @@ async fn main() -> Result<()> {
 fn app(state: AppState) -> Router {
     info!("creating router");
     Router::new()
-        .route("/webhook", post(post_webhook_handler))
+        .route("/api/webhook", post(post_webhook_handler))
         .layer(
             ServiceBuilder::new()
                 .layer(middleware::from_fn_with_state(
