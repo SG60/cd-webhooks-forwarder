@@ -9,6 +9,7 @@ spec:
   ports:
     - name: cd-webhooks-forwarder
       port: 80
+      targetPort: 3000
 ---
 # https://kubernetes.io/docs/concepts/workloads/controllers/deployment/
 apiVersion: apps/v1
