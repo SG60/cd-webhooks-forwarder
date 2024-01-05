@@ -76,7 +76,7 @@ async fn main() -> Result<()> {
             // "http://httpbin.org/anything/put_anything".to_owned(),
             "http://argocd-server.argocd:80/api/webhook".to_owned(),
             "http://argocd-applicationset-controller.argocd:7000/api/webhook".to_owned(),
-            "http://kubechecks.kubechecks:8080/api/webhook/hooks".to_owned(),
+            "http://kubechecks.kubechecks:8080/hooks/github/project".to_owned(),
         ],
         ..Default::default()
     };
