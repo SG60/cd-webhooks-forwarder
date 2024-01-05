@@ -24,6 +24,9 @@ spec:
       containers:
         - name: cd-webhooks-forwarder
           image: lhr.ocir.io/lrdyqp2xtoja/cd-webhooks-forwarder
+          env:
+            - name: RUST_LOG
+              value: cd_webhooks_forwarder=trace
           resources:
             requests:
               cpu: 5m
