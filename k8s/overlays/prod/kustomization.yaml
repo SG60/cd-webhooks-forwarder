@@ -2,7 +2,7 @@ apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 labels:
   - pairs:
-      app.kubernetes.io/version: 4d76689380aa8f36bde3e2a2aad407d4dd413bfa
+      app.kubernetes.io/version: 4342f50e5813731fef9580527938045b96c75623
 commonLabels:
   app.kubernetes.io/instance: argocd-webhooks
   app.kubernetes.io/name: cd-webhooks-forwarder
@@ -10,6 +10,6 @@ resources:
   - ../../base
 namespace: cd-webhooks-forwarder
 images:
-  - digest: sha256:ce3bf93be22f422ff68da1b03b3f0eba244f9840b0855da81f305ce4d0060ee4
+  - digest: sha256:b7d6bcdb5ce6492275f00759e13fb1d92aa32076d0eb61a6b3224ddfa3b376f9
     name: lhr.ocir.io/lrdyqp2xtoja/cd-webhooks-forwarder
-    newName: lhr.ocir.io/lrdyqp2xtoja/cd-webhooks-forwarder:sha-4d76689380aa8f36bde3e2a2aad407d4dd413bfa
+    newName: lhr.ocir.io/lrdyqp2xtoja/cd-webhooks-forwarder:sha-4342f50e5813731fef9580527938045b96c75623
