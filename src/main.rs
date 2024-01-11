@@ -74,7 +74,7 @@ async fn main() -> Result<()> {
         // TODO: make this configurable through an env var or command line
         proxy_destinations: vec![
             // "http://httpbin.org/anything/put_anything".to_owned(),
-            "https://argocd-server.argocd:443/api/webhook".to_owned(),
+            "http://argocd-server.argocd:443/api/webhook".to_owned(),
             "http://argocd-applicationset-controller.argocd:7000/api/webhook".to_owned(),
             "http://kubechecks.kubechecks:8080/hooks/github/project".to_owned(),
         ],
