@@ -13,7 +13,7 @@ futures = "0.3.30"
 hex = "0.4.3"
 http = "1.0.0"
 http-body-util = "0.1.0"
-hyper = "1.1.0"
+hyper = "1.2.0"
 hyper-util = { version = "0.1.2", features = ["client", "client-legacy"] }
 opentelemetry-stdout = { version = "0.2.0", features = ["trace"] }
 opentelemetry-tracing-utils = { version = "0.3.0" }
