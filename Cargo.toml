@@ -27,6 +27,6 @@ tracing = "0.1.40"
 
 [dev-dependencies]
 wiremock = "0.5.22"
-test-log = { version = "0.2.14", features = [
+test-log = { version = "0.2.15", features = [
 	"trace",
 ], default-features = false }
