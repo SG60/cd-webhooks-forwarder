@@ -12,7 +12,7 @@ base64 = "0.21.5"
 futures = "0.3.30"
 hex = "0.4.3"
 http = "1.0.0"
-http-body-util = "0.1.0"
+http-body-util = "0.1.1"
 hyper = "1.2.0"
 hyper-util = { version = "0.1.2", features = ["client", "client-legacy"] }
 opentelemetry-stdout = { version = "0.2.0", features = ["trace"] }
