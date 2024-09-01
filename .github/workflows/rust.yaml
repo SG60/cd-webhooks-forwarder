@@ -136,7 +136,7 @@ jobs:
           $KUSTOMIZE_COMMAND edit set image \
             ${DOCKER_CONTAINER_IMAGE_BASE}=${DOCKER_CONTAINER_IMAGE_BASE}:sha-${COMMIT_SHA}@${{ needs.build.outputs.pushed-image-digest }}
       - name: Update version label
-        uses: mikefarah/yq@dd648994340a5d03225d97abf19c9bf1086c3f07 # v4.40.5
+        uses: mikefarah/yq@bbdd97482f2d439126582a59689eb1c855944955 # v4.44.3
         with:
           cmd: yq -i '.labels[].pairs."app.kubernetes.io/version" = strenv(COMMIT_SHA)' k8s/overlays/prod/kustomization.yaml
 
