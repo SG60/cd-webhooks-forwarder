@@ -39,10 +39,10 @@ jobs:
       - uses: docker/setup-buildx-action@c47758b77c9736f4b2ef4073d4d51994fabfe349 # v3.7.1
 
       # nix dev shell setup
-      - uses: DeterminateSystems/nix-installer-action@v14
+      - uses: DeterminateSystems/nix-installer-action@da36cb69b1c3247ad7a1f931ebfd954a1105ef14 # v14
       - uses: cachix/cachix-action@6a9a34cdd93d0ae4b4b59fd678660efb08109f2f # v12
         with: {name: "nix-community"}
-      - uses: DeterminateSystems/magic-nix-cache-action@v8
+      - uses: DeterminateSystems/magic-nix-cache-action@87b14cf437d03d37989d87f0fa5ce4f5dc1a330b # v8
 
       - name: test
         run: nix develop -c cargo test
@@ -99,7 +99,7 @@ jobs:
           echo "image digest: \`${DOCKER_IMAGE_DIGEST}\`" >> $GITHUB_STEP_SUMMARY
 
       - name: Run Trivy vulnerability scanner
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@915b19bbe73b92a6cf82a1bc12b087c9a19a5fe2 # 0.28.0
         with:
           image-ref: ${{ env.DOCKER_CONTAINER_IMAGE_BASE }}:sha-${{ env.COMMIT_SHA }}
           format: "table"
