@@ -302,12 +302,43 @@ mod tests {
             .mount(&mock_server)
             .await;
 
+        // Add a mock to ensure correct behaviour given a redirect
+        Mock::given(method("POST"))
+            .and(matchers::path("/webhook-with-redirect"))
+            .respond_with(
+                ResponseTemplate::new(307)
+                    .insert_header("location", "/webhook-redirected-destination"),
+            )
+            .expect(1)
+            // We assign a name to the mock - it will be shown in error messages
+            // if our expectation is not verified!
+            .named("webhook redirect")
+            // Mounting the mock on the mock server - it's now effective!
+            .mount(&mock_server)
+            .await;
+        Mock::given(method("POST"))
+            .and(matchers::path("/webhook-redirected-destination"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "message": "this is the result of the redirect!",
+                "webhook_data_1": "webhook info info info"
+            })))
+            .expect(1)
+            // We assign a name to the mock - it will be shown in error messages
+            // if our expectation is not verified!
+            .named("webhook redirected destination")
+            // Mounting the mock on the mock server - it's now effective!
+            .mount(&mock_server)
+            .await;
+
         let app_state = AppState {
             hmac_verification_key: Some(hmac::Key::new(
                 hmac::HMAC_SHA256,
                 github_webhook_secret.as_bytes(),
             )),
-            proxy_destinations: vec![format!("{}/webhook", mock_server.uri())],
+            proxy_destinations: vec![
+                format!("{}/webhook", mock_server.uri()),
+                format!("{}/webhook-with-redirect", mock_server.uri()),
+            ],
             ..Default::default()
         };
 
