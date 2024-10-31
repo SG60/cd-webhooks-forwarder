@@ -50,7 +50,7 @@ jobs:
         run: nix develop -c cross build --target ${{ matrix.target.rust }} --release
 
       - name: Login to Docker registry
-        uses: docker/login-action@465a07811f14bebb1938fbed4728c6a1ff8901fc # v2.0.0
+        uses: docker/login-action@465a07811f14bebb1938fbed4728c6a1ff8901fc # v2.2.0
         with:
           registry: lhr.ocir.io
           username: ${{ secrets.OCIR_USERNAME }}
