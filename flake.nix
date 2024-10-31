@@ -7,7 +7,7 @@
       in
       {
         devShells = {
-          default = with pkgs; mkShell {
+          default = with pkgs; mkShellNoCC {
             packages = [ protobuf ];
           };
         };
