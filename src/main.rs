@@ -23,12 +23,17 @@ use tracing::{debug, debug_span, info, trace, Instrument};
 struct AppState {
     hmac_verification_key: Option<hmac::Key>,
     proxy_destinations: Vec<String>,
-    reqwest_client: reqwest::Client,
+    reqwest_client: reqwest_middleware::ClientWithMiddleware,
 }
 
 impl Default for AppState {
     fn default() -> Self {
-        let reqwest_client = reqwest::Client::new();
+        let reqwest_client_without_middleware = reqwest::Client::new();
+
+        let reqwest_client =
+            reqwest_middleware::ClientBuilder::new(reqwest_client_without_middleware)
+                .with(reqwest_tracing::TracingMiddleware::default())
+                .build();
 
         Self {
             hmac_verification_key: default::Default::default(),
