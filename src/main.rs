@@ -12,15 +12,10 @@ use axum::{
 };
 use futures::StreamExt;
 use http_body_util::BodyExt;
-use hyper::body::Bytes;
-use hyper_util::{
-    client::legacy::{connect::HttpConnector, Client},
-    rt::TokioExecutor,
-};
-use opentelemetry_tracing_utils::{OpenTelemetrySpanExt, TracingLayer, TracingService};
+use opentelemetry_tracing_utils::OpenTelemetrySpanExt;
 use ring::hmac;
 use serde_json::json;
-use tower::{Service, ServiceBuilder, ServiceExt};
+use tower::ServiceBuilder;
 use tower_http::trace::TraceLayer;
 use tracing::{debug, debug_span, info, trace, Instrument};
 
@@ -28,26 +23,17 @@ use tracing::{debug, debug_span, info, trace, Instrument};
 struct AppState {
     hmac_verification_key: Option<hmac::Key>,
     proxy_destinations: Vec<String>,
-    client: TracingService<Client<HttpConnector, http_body_util::Full<Bytes>>>,
+    reqwest_client: reqwest::Client,
 }
 
 impl Default for AppState {
     fn default() -> Self {
-        let hyper_client =
-            Client::builder(TokioExecutor::new()).build_http::<http_body_util::Full<Bytes>>();
-
-        let tower_service_stack = ServiceBuilder::new()
-            .layer(TracingLayer)
-            .service(hyper_client);
-
-        let hyper_wrapped_client = futures::executor::block_on(tower_service_stack.clone().ready())
-            .expect("should be valid")
-            .to_owned();
+        let reqwest_client = reqwest::Client::new();
 
         Self {
             hmac_verification_key: default::Default::default(),
             proxy_destinations: default::Default::default(),
-            client: hyper_wrapped_client,
+            reqwest_client,
         }
     }
 }
@@ -161,21 +147,27 @@ async fn post_webhook_handler(
                     let mut new_parts = parts.clone();
                     new_parts.uri = http::Uri::try_from(destination).unwrap();
 
-                    let request = hyper::Request::from_parts(new_parts, body_bytes.clone().into());
-
-                    let response_future = state.client.clone().call(request);
+                    let reqwest_request = state
+                        .reqwest_client
+                        .request(
+                            parts.method.clone(),
+                            reqwest::Url::parse(destination).expect("should be valid url"),
+                        )
+                        .headers(parts.headers.clone())
+                        .body(body_bytes.clone());
 
                     async {
-                        let response = response_future.await.unwrap();
+                        let reqwest_response =
+                            reqwest_request.send().await.expect("request should work");
+                        let status = reqwest_response.status();
+                        let reqwest_body_bytes = reqwest_response
+                            .bytes()
+                            .await
+                            .expect("expect valid bytes from the response");
 
-                        let (parts, incoming_body) = response.into_parts();
-
-                        let status = parts.status;
-
-                        let body = incoming_body.collect().await.unwrap().to_bytes();
-                        let json = serde_json::from_slice::<serde_json::Value>(&body)
+                        let json = serde_json::from_slice::<serde_json::Value>(&reqwest_body_bytes)
                             .unwrap_or_else(|_| {
-                                let body_processed = String::from_utf8_lossy(&body);
+                                let body_processed = String::from_utf8_lossy(&reqwest_body_bytes);
                                 json!(body_processed)
                             });
 
