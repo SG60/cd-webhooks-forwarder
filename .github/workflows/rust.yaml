@@ -58,7 +58,7 @@ jobs:
 
       - name: Docker meta tags generator
         id: meta
-        uses: docker/metadata-action@8e5442c4ef9f78752691e2d8f8d19755c6f78e81 # v5.0.0
+        uses: docker/metadata-action@8e5442c4ef9f78752691e2d8f8d19755c6f78e81 # v5.5.1
         # use correct sha for pr commits
         env:
           DOCKER_METADATA_PR_HEAD_SHA: true
