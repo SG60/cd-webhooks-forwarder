@@ -122,8 +122,6 @@ async fn post_webhook_handler(
     body: Body,
     // body: String,
 ) -> Result<axum::Json<ResponseJsonPayload>, StatusCode> {
-    debug!("{:?}", &headers);
-
     debug!(
         "current trace context: {:#?}",
         tracing::Span::current().context()
@@ -184,7 +182,7 @@ async fn post_webhook_handler(
                             status: status.as_u16(),
                         }
                     }
-                    .instrument(debug_span!("async block"))
+                    .instrument(debug_span!("send forwarded request and parse response"))
                 })
                 .collect::<futures::stream::FuturesUnordered<_>>()
                 .collect()
