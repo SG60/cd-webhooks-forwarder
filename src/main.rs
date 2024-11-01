@@ -12,11 +12,10 @@ use axum::{
 };
 use futures::StreamExt;
 use http_body_util::BodyExt;
-use opentelemetry_tracing_utils::OpenTelemetrySpanExt;
+use opentelemetry_tracing_utils::{make_tower_http_otel_trace_layer, OpenTelemetrySpanExt};
 use ring::hmac;
 use serde_json::json;
 use tower::ServiceBuilder;
-use tower_http::trace::TraceLayer;
 use tracing::{debug, debug_span, info, trace, Instrument};
 
 #[derive(Clone, Debug)]
@@ -91,13 +90,13 @@ fn app(state: AppState) -> Router {
         .route("/api/webhook", post(post_webhook_handler))
         .layer(
             ServiceBuilder::new()
+                // .map_request(opentelemetry_tracing_utils::extract_trace_context)
+                // tower_http trace logging
+                .layer(make_tower_http_otel_trace_layer())
                 .layer(middleware::from_fn_with_state(
                     state.clone(),
                     webhook_secret_verification_middleware,
-                ))
-                // tower_http trace logging
-                .layer(TraceLayer::new_for_http())
-                .map_request(opentelemetry_tracing_utils::extract_trace_context),
+                )),
         )
         .with_state(state)
 }
