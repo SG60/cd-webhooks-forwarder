@@ -114,6 +114,8 @@ struct IndividualWebhookResponse {
     body: serde_json::Value,
 }
 
+// BUG: The trace for this isn't linked to the auth middleware function for some reason. Why is
+// this?!
 #[tracing::instrument(ret, err, skip(state, parts, body))]
 async fn post_webhook_handler(
     State(state): State<AppState>,
@@ -129,7 +131,6 @@ async fn post_webhook_handler(
 
     match headers
         .get("X-GitHub-Event")
-        // .ok_or(StatusCode::BAD_REQUEST)?
         .and_then(|x| x.to_str().ok())
         .ok_or(StatusCode::BAD_REQUEST)?
     {
@@ -147,42 +148,12 @@ async fn post_webhook_handler(
                 .proxy_destinations
                 .iter()
                 .map(|destination| {
-                    let mut new_parts = parts.clone();
-                    new_parts.uri = http::Uri::try_from(destination).unwrap();
-
-                    let reqwest_request = state
-                        .reqwest_client
-                        .request(
-                            parts.method.clone(),
-                            reqwest::Url::parse(destination).expect("should be valid url"),
-                        )
-                        .headers(parts.headers.clone())
-                        .body(body_bytes.clone());
-
-                    async {
-                        let reqwest_response =
-                            reqwest_request.send().await.expect("request should work");
-                        let status = reqwest_response.status();
-                        let reqwest_body_string = reqwest_response
-                            .text()
-                            .await
-                            .expect("expect valid bytes from the response");
-
-                        let json =
-                            serde_json::from_str/* ::<serde_json::Value> */(&reqwest_body_string)
-                                .unwrap_or_else(|_| json!(reqwest_body_string));
-
-                        let destination = destination.to_owned();
-
-                        debug!(?status, destination, returned_body = ?json, "webhook forwarded to {}", destination);
-
-                        IndividualWebhookResponse {
-                            body: json,
-                            source: destination,
-                            status: status.as_u16(),
-                        }
-                    }
-                    .instrument(debug_span!("send forwarded request and parse response"))
+                    send_one_forwarded_request_and_parse_response(
+                        destination,
+                        &state.reqwest_client,
+                        &parts,
+                        &body_bytes,
+                    )
                 })
                 .collect::<futures::stream::FuturesUnordered<_>>()
                 .collect()
@@ -200,6 +171,40 @@ async fn post_webhook_handler(
         }
 
         _ => Err(StatusCode::BAD_REQUEST),
+    }
+}
+
+#[tracing::instrument]
+async fn send_one_forwarded_request_and_parse_response(
+    new_destination_url: &str,
+    reqwest_client: &reqwest_middleware::ClientWithMiddleware,
+    original_parts: &axum::http::request::Parts,
+    body_bytes: &axum::body::Bytes,
+) -> IndividualWebhookResponse {
+    let reqwest_request = reqwest_client
+        .request(
+            original_parts.method.clone(),
+            reqwest::Url::parse(new_destination_url).expect("should be valid url"),
+        )
+        .headers(original_parts.headers.clone())
+        .body(body_bytes.clone());
+
+    let reqwest_response = reqwest_request.send().await.expect("request should work");
+    let status = reqwest_response.status();
+    let reqwest_body_string = reqwest_response
+        .text()
+        .await
+        .expect("expect valid bytes from the response");
+
+    let json =
+        serde_json::from_str(&reqwest_body_string).unwrap_or_else(|_| json!(reqwest_body_string));
+
+    debug!(?status, new_destination_url, returned_body = ?json, "webhook forwarded to {}", new_destination_url);
+
+    IndividualWebhookResponse {
+        body: json,
+        source: new_destination_url.to_owned(),
+        status: status.as_u16(),
     }
 }
 
