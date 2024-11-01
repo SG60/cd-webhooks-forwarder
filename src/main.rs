@@ -163,22 +163,22 @@ async fn post_webhook_handler(
                         let reqwest_response =
                             reqwest_request.send().await.expect("request should work");
                         let status = reqwest_response.status();
-                        let reqwest_body_bytes = reqwest_response
-                            .bytes()
+                        let reqwest_body_string = reqwest_response
+                            .text()
                             .await
                             .expect("expect valid bytes from the response");
 
-                        let json = serde_json::from_slice::<serde_json::Value>(&reqwest_body_bytes)
-                            .unwrap_or_else(|_| {
-                                let body_processed = String::from_utf8_lossy(&reqwest_body_bytes);
-                                json!(body_processed)
-                            });
+                        let json =
+                            serde_json::from_str/* ::<serde_json::Value> */(&reqwest_body_string)
+                                .unwrap_or_else(|_| json!(reqwest_body_string));
 
-                        debug!(?status, "{:?}", &json);
+                        let destination = destination.to_owned();
+
+                        debug!(?status, destination, returned_body = ?json, "webhook forwarded to {}", destination);
 
                         IndividualWebhookResponse {
                             body: json,
-                            source: destination.to_owned(),
+                            source: destination,
                             status: status.as_u16(),
                         }
                     }
@@ -186,7 +186,7 @@ async fn post_webhook_handler(
                 })
                 .collect::<futures::stream::FuturesUnordered<_>>()
                 .collect()
-                .instrument(debug_span!("forwarding webhook"))
+                .instrument(debug_span!("forwarding webhooks"))
                 .await;
 
             let response_json = axum::Json(ResponseJsonPayload {
