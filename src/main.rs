@@ -12,11 +12,10 @@ use axum::{
 };
 use futures::StreamExt;
 use http_body_util::BodyExt;
-use opentelemetry_tracing_utils::OpenTelemetrySpanExt;
+use opentelemetry_tracing_utils::{make_tower_http_otel_trace_layer, OpenTelemetrySpanExt};
 use ring::hmac;
 use serde_json::json;
 use tower::ServiceBuilder;
-use tower_http::trace::TraceLayer;
 use tracing::{debug, debug_span, info, trace, Instrument};
 
 #[derive(Clone, Debug)]
@@ -91,13 +90,13 @@ fn app(state: AppState) -> Router {
         .route("/api/webhook", post(post_webhook_handler))
         .layer(
             ServiceBuilder::new()
+                // .map_request(opentelemetry_tracing_utils::extract_trace_context)
+                // tower_http trace logging
+                .layer(make_tower_http_otel_trace_layer())
                 .layer(middleware::from_fn_with_state(
                     state.clone(),
                     webhook_secret_verification_middleware,
-                ))
-                // tower_http trace logging
-                .layer(TraceLayer::new_for_http())
-                .map_request(opentelemetry_tracing_utils::extract_trace_context),
+                )),
         )
         .with_state(state)
 }
@@ -114,6 +113,8 @@ struct IndividualWebhookResponse {
     body: serde_json::Value,
 }
 
+// BUG: The trace for this isn't linked to the auth middleware function for some reason. Why is
+// this?!
 #[tracing::instrument(ret, err, skip(state, parts, body))]
 async fn post_webhook_handler(
     State(state): State<AppState>,
@@ -122,8 +123,6 @@ async fn post_webhook_handler(
     body: Body,
     // body: String,
 ) -> Result<axum::Json<ResponseJsonPayload>, StatusCode> {
-    debug!("{:?}", &headers);
-
     debug!(
         "current trace context: {:#?}",
         tracing::Span::current().context()
@@ -131,7 +130,6 @@ async fn post_webhook_handler(
 
     match headers
         .get("X-GitHub-Event")
-        // .ok_or(StatusCode::BAD_REQUEST)?
         .and_then(|x| x.to_str().ok())
         .ok_or(StatusCode::BAD_REQUEST)?
     {
@@ -149,46 +147,16 @@ async fn post_webhook_handler(
                 .proxy_destinations
                 .iter()
                 .map(|destination| {
-                    let mut new_parts = parts.clone();
-                    new_parts.uri = http::Uri::try_from(destination).unwrap();
-
-                    let reqwest_request = state
-                        .reqwest_client
-                        .request(
-                            parts.method.clone(),
-                            reqwest::Url::parse(destination).expect("should be valid url"),
-                        )
-                        .headers(parts.headers.clone())
-                        .body(body_bytes.clone());
-
-                    async {
-                        let reqwest_response =
-                            reqwest_request.send().await.expect("request should work");
-                        let status = reqwest_response.status();
-                        let reqwest_body_bytes = reqwest_response
-                            .bytes()
-                            .await
-                            .expect("expect valid bytes from the response");
-
-                        let json = serde_json::from_slice::<serde_json::Value>(&reqwest_body_bytes)
-                            .unwrap_or_else(|_| {
-                                let body_processed = String::from_utf8_lossy(&reqwest_body_bytes);
-                                json!(body_processed)
-                            });
-
-                        debug!(?status, "{:?}", &json);
-
-                        IndividualWebhookResponse {
-                            body: json,
-                            source: destination.to_owned(),
-                            status: status.as_u16(),
-                        }
-                    }
-                    .instrument(debug_span!("async block"))
+                    send_one_forwarded_request_and_parse_response(
+                        destination,
+                        &state.reqwest_client,
+                        &parts,
+                        &body_bytes,
+                    )
                 })
                 .collect::<futures::stream::FuturesUnordered<_>>()
                 .collect()
-                .instrument(debug_span!("forwarding webhook"))
+                .instrument(debug_span!("forwarding webhooks"))
                 .await;
 
             let response_json = axum::Json(ResponseJsonPayload {
@@ -202,6 +170,40 @@ async fn post_webhook_handler(
         }
 
         _ => Err(StatusCode::BAD_REQUEST),
+    }
+}
+
+#[tracing::instrument]
+async fn send_one_forwarded_request_and_parse_response(
+    new_destination_url: &str,
+    reqwest_client: &reqwest_middleware::ClientWithMiddleware,
+    original_parts: &axum::http::request::Parts,
+    body_bytes: &axum::body::Bytes,
+) -> IndividualWebhookResponse {
+    let reqwest_request = reqwest_client
+        .request(
+            original_parts.method.clone(),
+            reqwest::Url::parse(new_destination_url).expect("should be valid url"),
+        )
+        .headers(original_parts.headers.clone())
+        .body(body_bytes.clone());
+
+    let reqwest_response = reqwest_request.send().await.expect("request should work");
+    let status = reqwest_response.status();
+    let reqwest_body_string = reqwest_response
+        .text()
+        .await
+        .expect("expect valid bytes from the response");
+
+    let json =
+        serde_json::from_str(&reqwest_body_string).unwrap_or_else(|_| json!(reqwest_body_string));
+
+    debug!(?status, new_destination_url, returned_body = ?json, "webhook forwarded to {}", new_destination_url);
+
+    IndividualWebhookResponse {
+        body: json,
+        source: new_destination_url.to_owned(),
+        status: status.as_u16(),
     }
 }
 
