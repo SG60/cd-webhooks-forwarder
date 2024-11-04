@@ -113,8 +113,6 @@ struct IndividualWebhookResponse {
     body: serde_json::Value,
 }
 
-// BUG: The trace for this isn't linked to the auth middleware function for some reason. Why is
-// this?!
 #[tracing::instrument(ret, err, skip(state, parts, body))]
 async fn post_webhook_handler(
     State(state): State<AppState>,
