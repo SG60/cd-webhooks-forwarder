@@ -8,7 +8,7 @@ edition = "2021"
 [dependencies]
 anyhow = "1.0.81"
 axum = "0.7.5"
-base64 = "0.21.5"
+base64 = "0.22.0"
 futures = "0.3.30"
 hex = "0.4.3"
 http = "1.0.0"
