@@ -8,7 +8,7 @@
       {
         devShells = {
           default = with pkgs; mkShellNoCC {
-            packages = [ protobuf ];
+            packages = [ protobuf bacon ];
           };
         };
       });
