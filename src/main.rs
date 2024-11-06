@@ -11,6 +11,7 @@ use axum::{
     Router,
 };
 use futures::StreamExt;
+use http::HeaderValue;
 use http_body_util::BodyExt;
 use opentelemetry_tracing_utils::{make_tower_http_otel_trace_layer, OpenTelemetrySpanExt};
 use ring::hmac;
@@ -136,9 +137,31 @@ async fn post_webhook_handler(
 
             let body_bytes = body.collect().await.unwrap().to_bytes();
 
+            // Headers that GitHub webhooks include
+            // Could make this configurable using figment or something similar at some point
+            let headers_that_should_be_forwarded = [
+                "Accept",
+                "Content-Type",
+                "User-Agent",
+                "X-GitHub-Delivery",
+                "X-GitHub-Event",
+                "X-GitHub-Hook-ID",
+                "X-GitHub-Hook-Installation-Target-ID",
+                "X-GitHub-Hook-Installation-Target-Type",
+            ];
+
+            // a new headermap filtered to contain just the headers that I actually want to forward
+            let mut headermap_to_forward = HeaderMap::new();
+            for i in headers_that_should_be_forwarded {
+                parts
+                    .headers
+                    .get(i)
+                    .map(|header_value| headermap_to_forward.insert(i, header_value.clone()));
+            }
+
             debug!(
-                "current trace context: {:#?}",
-                tracing::Span::current().context()
+                "headermap that will be forwarded: {:#?}",
+                headermap_to_forward
             );
 
             let webhook_responses: Vec<_> = state
@@ -148,8 +171,9 @@ async fn post_webhook_handler(
                     send_one_forwarded_request_and_parse_response(
                         destination,
                         &state.reqwest_client,
-                        &parts,
                         &body_bytes,
+                        parts.method.clone(),
+                        headermap_to_forward.clone(),
                     )
                 })
                 .collect::<futures::stream::FuturesUnordered<_>>()
@@ -175,15 +199,16 @@ async fn post_webhook_handler(
 async fn send_one_forwarded_request_and_parse_response(
     new_destination_url: &str,
     reqwest_client: &reqwest_middleware::ClientWithMiddleware,
-    original_parts: &axum::http::request::Parts,
     body_bytes: &axum::body::Bytes,
+    method: http::Method,
+    forwarded_headers: HeaderMap<HeaderValue>,
 ) -> IndividualWebhookResponse {
     let reqwest_request = reqwest_client
         .request(
-            original_parts.method.clone(),
+            method,
             reqwest::Url::parse(new_destination_url).expect("should be valid url"),
         )
-        .headers(original_parts.headers.clone())
+        .headers(forwarded_headers)
         .body(body_bytes.clone());
 
     let reqwest_response = reqwest_request.send().await.expect("request should work");
