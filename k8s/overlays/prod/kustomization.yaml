@@ -1,11 +1,11 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
+# Include these labels in the pod template, but don't include them in selectors,
+# as they are supposed to be immutable!
 labels:
-  - pairs:
-      app.kubernetes.io/version: 8703c608c7d75809de49c3e66d1f76669d42a1c2
-    # Include these labels in the pod template, but don't include them in selectors,
-    # as they are supposed to be immutable!
-    includeTemplates: true
+  - includeTemplates: true
+    pairs:
+      app.kubernetes.io/version: 315f843bdc8230460f62e5090802f0e96d87e965
 commonLabels:
   app.kubernetes.io/instance: argocd-webhooks
   app.kubernetes.io/name: cd-webhooks-forwarder
@@ -13,6 +13,6 @@ resources:
   - ../../base
 namespace: cd-webhooks-forwarder
 images:
-  - digest: sha256:dd96bbca608ef9f0405afbc109d394301294cb8519b0426fd2582e757fc76bcd
+  - digest: sha256:0976b64eec826e1b7a497814a75b374eede7a37033cc8276b06ff928fb819bce
     name: lhr.ocir.io/lrdyqp2xtoja/cd-webhooks-forwarder
-    newName: lhr.ocir.io/lrdyqp2xtoja/cd-webhooks-forwarder:sha-8703c608c7d75809de49c3e66d1f76669d42a1c2
+    newName: lhr.ocir.io/lrdyqp2xtoja/cd-webhooks-forwarder:sha-315f843bdc8230460f62e5090802f0e96d87e965
