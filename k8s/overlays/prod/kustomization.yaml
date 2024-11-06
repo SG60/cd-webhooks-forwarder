@@ -3,6 +3,9 @@ kind: Kustomization
 labels:
   - pairs:
       app.kubernetes.io/version: 8703c608c7d75809de49c3e66d1f76669d42a1c2
+    # Include these labels in the pod template, but don't include them in selectors,
+    # as they are supposed to be immutable!
+    includeTemplates: true
 commonLabels:
   app.kubernetes.io/instance: argocd-webhooks
   app.kubernetes.io/name: cd-webhooks-forwarder
