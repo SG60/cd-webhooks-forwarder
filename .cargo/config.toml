@@ -1,0 +1,9 @@
+[target.aarch64-unknown-linux-musl]
+linker = "clang"
+# runner = "my-emulator"
+rustflags = [
+	"-C",
+	"link-arg=-fuse-ld=mold",
+	"-C",
+	"link-arg=--target=aarch64-unknown-linux-musl",
+]
