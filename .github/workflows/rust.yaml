@@ -34,8 +34,6 @@ jobs:
         with:
           cache-all-crates: "true"
 
-      - run: cargo install cross
-
       - uses: docker/setup-buildx-action@c47758b77c9736f4b2ef4073d4d51994fabfe349 # v3.7.1
 
       # nix dev shell setup
@@ -47,7 +45,7 @@ jobs:
       - name: test
         run: nix develop -c cargo test
       - name: build
-        run: nix develop -c cross build --target ${{ matrix.target.rust }} --release
+        run: nix develop -c cargo build --target ${{ matrix.target.rust }} --release
 
       - name: Login to Docker registry
         uses: docker/login-action@9780b0c442fbb1117ed29e0efdff1e18412f7567 # v3.3.0
