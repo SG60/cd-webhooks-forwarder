@@ -48,6 +48,8 @@ jobs:
       - name: test
         run: nix develop -c cargo test
       - name: build
+        env:
+          TARGET_CC: clang
         run: nix develop -c cargo build --target ${{ matrix.target.rust }} --release
 
       - name: Login to Docker registry
