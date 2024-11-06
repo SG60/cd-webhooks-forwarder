@@ -11,7 +11,7 @@ use axum::{
     Router,
 };
 use futures::StreamExt;
-use http::HeaderValue;
+use http::{HeaderName, HeaderValue};
 use http_body_util::BodyExt;
 use opentelemetry_tracing_utils::{make_tower_http_otel_trace_layer, OpenTelemetrySpanExt};
 use ring::hmac;
@@ -23,6 +23,7 @@ use tracing::{debug, debug_span, info, trace, Instrument};
 struct AppState {
     hmac_verification_key: Option<hmac::Key>,
     proxy_destinations: Vec<String>,
+    headers_that_should_be_forwarded: Vec<String>,
     reqwest_client: reqwest_middleware::ClientWithMiddleware,
 }
 
@@ -35,9 +36,25 @@ impl Default for AppState {
                 .with(reqwest_tracing::TracingMiddleware::default())
                 .build();
 
+        // Headers that GitHub webhooks include
+        // Could make this configurable using figment or something similar at some point
+        let headers_that_should_be_forwarded = [
+            "Accept",
+            "Content-Type",
+            "User-Agent",
+            "X-GitHub-Delivery",
+            "X-GitHub-Event",
+            "X-GitHub-Hook-ID",
+            "X-GitHub-Hook-Installation-Target-ID",
+            "X-GitHub-Hook-Installation-Target-Type",
+        ]
+        .map(String::from)
+        .to_vec();
+
         Self {
             hmac_verification_key: default::Default::default(),
             proxy_destinations: default::Default::default(),
+            headers_that_should_be_forwarded,
             reqwest_client,
         }
     }
@@ -60,6 +77,15 @@ async fn main() -> Result<()> {
 
     info!("starting up");
 
+    let reqwest_client_without_middleware = reqwest::Client::builder()
+        // TODO: make whether this uses insecure certificate config configurable
+        .danger_accept_invalid_certs(true)
+        .build()
+        .unwrap();
+    let reqwest_client = reqwest_middleware::ClientBuilder::new(reqwest_client_without_middleware)
+        .with(reqwest_tracing::TracingMiddleware::default())
+        .build();
+
     let app_state = AppState {
         hmac_verification_key,
         // TODO: make this configurable through an env var or command line
@@ -69,6 +95,7 @@ async fn main() -> Result<()> {
             "http://argocd-applicationset-controller.argocd:7000/api/webhook".to_owned(),
             "http://kubechecks.kubechecks:8080/hooks/github/project".to_owned(),
         ],
+        reqwest_client,
         ..Default::default()
     };
 
@@ -137,26 +164,17 @@ async fn post_webhook_handler(
 
             let body_bytes = body.collect().await.unwrap().to_bytes();
 
-            // Headers that GitHub webhooks include
-            // Could make this configurable using figment or something similar at some point
-            let headers_that_should_be_forwarded = [
-                "Accept",
-                "Content-Type",
-                "User-Agent",
-                "X-GitHub-Delivery",
-                "X-GitHub-Event",
-                "X-GitHub-Hook-ID",
-                "X-GitHub-Hook-Installation-Target-ID",
-                "X-GitHub-Hook-Installation-Target-Type",
-            ];
-
             // a new headermap filtered to contain just the headers that I actually want to forward
             let mut headermap_to_forward = HeaderMap::new();
-            for i in headers_that_should_be_forwarded {
-                parts
-                    .headers
-                    .get(i)
-                    .map(|header_value| headermap_to_forward.insert(i, header_value.clone()));
+            for i in state.headers_that_should_be_forwarded {
+                parts.headers.get(&i).map(|header_value| {
+                    headermap_to_forward.insert(
+                        HeaderName::try_from(i).expect(
+                            "HeaderValue from the list of headers to forward should be valid",
+                        ),
+                        header_value.clone(),
+                    )
+                });
             }
 
             debug!(
