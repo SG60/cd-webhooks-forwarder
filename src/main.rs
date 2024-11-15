@@ -77,11 +77,7 @@ async fn main() -> Result<()> {
 
     info!("starting up");
 
-    let reqwest_client_without_middleware = reqwest::Client::builder()
-        // TODO: make whether this uses insecure certificate config configurable
-        .danger_accept_invalid_certs(true)
-        .build()
-        .unwrap();
+    let reqwest_client_without_middleware = reqwest::Client::builder().build().unwrap();
     let reqwest_client = reqwest_middleware::ClientBuilder::new(reqwest_client_without_middleware)
         .with(reqwest_tracing::TracingMiddleware::default())
         .build();
