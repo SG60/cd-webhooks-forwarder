@@ -17,7 +17,7 @@ use opentelemetry_tracing_utils::{make_tower_http_otel_trace_layer, OpenTelemetr
 use ring::hmac;
 use serde_json::json;
 use tower::ServiceBuilder;
-use tracing::{debug, debug_span, info, trace, Instrument};
+use tracing::{debug, debug_span, info, info_span, trace, warn, Instrument};
 
 #[derive(Clone, Debug)]
 struct AppState {
@@ -65,38 +65,52 @@ async fn main() -> Result<()> {
     // initialise tracing
     opentelemetry_tracing_utils::set_up_logging().expect("tracing setup should work");
 
-    // set the correct hmac secret
-    let hmac_verification_key =
-        if let Ok(github_webhook_secret) = std::env::var("GITHUB_WEBHOOK_SECRET") {
-            let hmac_verification_key =
-                hmac::Key::new(hmac::HMAC_SHA256, github_webhook_secret.as_bytes());
-            Some(hmac_verification_key)
-        } else {
-            None
+    let app = info_span!("Initialising").in_scope(|| {
+        // set the correct hmac secret
+        let hmac_verification_key =
+            if let Ok(github_webhook_secret) = std::env::var("GITHUB_WEBHOOK_SECRET") {
+                let hmac_verification_key =
+                    hmac::Key::new(hmac::HMAC_SHA256, github_webhook_secret.as_bytes());
+                Some(hmac_verification_key)
+            } else {
+                None
+            };
+
+        info!("starting up");
+
+        // Get the destinations to forward webhooks to
+        let proxy_destinations: Vec<String> = std::env::var("PROXY_DESTINATIONS").map_or_else(
+            |error_var| {
+                warn!("PROXY_DESTINATIONS env var not set, using default config");
+                warn!("{}", error_var);
+
+                vec![
+                    "http://argocd-server.argocd:443/api/webhook".to_owned(),
+                    "http://argocd-applicationset-controller.argocd:7000/api/webhook".to_owned(),
+                    "http://kubechecks.kubechecks:8080/hooks/github/project".to_owned(),
+                ]
+            },
+            |var_value| var_value.split(',').map(|s| s.to_owned()).collect(),
+        );
+
+        info!("proxy destinations: {:?}", &proxy_destinations);
+
+        let reqwest_client_without_middleware = reqwest::Client::builder().build().unwrap();
+        let reqwest_client =
+            reqwest_middleware::ClientBuilder::new(reqwest_client_without_middleware)
+                .with(reqwest_tracing::TracingMiddleware::default())
+                .build();
+
+        let app_state = AppState {
+            hmac_verification_key,
+            proxy_destinations,
+            reqwest_client,
+            ..Default::default()
         };
 
-    info!("starting up");
-
-    let reqwest_client_without_middleware = reqwest::Client::builder().build().unwrap();
-    let reqwest_client = reqwest_middleware::ClientBuilder::new(reqwest_client_without_middleware)
-        .with(reqwest_tracing::TracingMiddleware::default())
-        .build();
-
-    let app_state = AppState {
-        hmac_verification_key,
-        // TODO: make this configurable through an env var or command line
-        proxy_destinations: vec![
-            // "http://httpbin.org/anything/put_anything".to_owned(),
-            "http://argocd-server.argocd:443/api/webhook".to_owned(),
-            "http://argocd-applicationset-controller.argocd:7000/api/webhook".to_owned(),
-            "http://kubechecks.kubechecks:8080/hooks/github/project".to_owned(),
-        ],
-        reqwest_client,
-        ..Default::default()
-    };
-
-    // build our application with a single route
-    let app = app(app_state);
+        // build our application with a single route
+        app(app_state)
+    });
 
     // run our app with hyper, listening globally on port 3000
     let listener = tokio::net::TcpListener::bind("0.0.0.0:3000").await.unwrap();
