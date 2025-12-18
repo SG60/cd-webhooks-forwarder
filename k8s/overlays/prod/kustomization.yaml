@@ -5,7 +5,7 @@ kind: Kustomization
 labels:
   - includeTemplates: true
     pairs:
-      app.kubernetes.io/version: 235864e3e41125cda028a87b728d971e352e446a
+      app.kubernetes.io/version: b485c27ec8b305958dfd78bb8f06076a294f427a
 commonLabels:
   app.kubernetes.io/instance: argocd-webhooks
   app.kubernetes.io/name: cd-webhooks-forwarder
@@ -13,6 +13,6 @@ resources:
   - ../../base
 namespace: cd-webhooks-forwarder
 images:
-  - digest: sha256:4805ba49f70593c307fae9471301e7111c9dd668e2788adff6f49c0d096be62b
+  - digest: sha256:13adf1e5a691f8b91e2124efad40a55c638f24e7a125ac046f10fff57365f28c
     name: lhr.ocir.io/lrdyqp2xtoja/cd-webhooks-forwarder
-    newName: lhr.ocir.io/lrdyqp2xtoja/cd-webhooks-forwarder:sha-235864e3e41125cda028a87b728d971e352e446a
+    newName: lhr.ocir.io/lrdyqp2xtoja/cd-webhooks-forwarder:sha-b485c27ec8b305958dfd78bb8f06076a294f427a
