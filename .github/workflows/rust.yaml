@@ -30,7 +30,7 @@ jobs:
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
-      - uses: rui314/setup-mold@725a8794d15fc7563f59595bd9556495c0564878 # v1
+      - uses: rui314/setup-mold@10ca16bf91dc22e05ebdc935cad9c75ea248f621 # v1
 
       - uses: dtolnay/rust-toolchain@stable
         with:
